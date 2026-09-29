@@ -16,6 +16,11 @@ USER = "KartikHalkunde"
 DOB = date(2005, 9, 26)
 W = 64      # width (in characters) of the info column
 GAP = 3     # spaces between ASCII art and info column
+
+# ---- lines-of-code filtering (tune these if the number looks inflated) ----
+LOC_SKIP_FORKS = True          # ignore forked repos
+LOC_EXCLUDE_REPOS = set()      # repo names to ignore, e.g. {"mc-assets", "old-dump"}
+LOC_MAX_COMMIT_LINES = 20000   # ignore single commits larger than this (vendor/generated dumps)
 TOKEN = os.environ.get("STATS_TOKEN") or os.environ.get("GITHUB_TOKEN", "")
 
 # ---- SVG look ----
@@ -122,7 +127,7 @@ query($login: String!, $cursor: String) {
     repositories(first: 100, after: $cursor,
                  ownerAffiliations: [OWNER, COLLABORATOR, ORGANIZATION_MEMBER]) {
       pageInfo { hasNextPage endCursor }
-      nodes { name owner { login } }
+      nodes { name isFork owner { login } }
     }
   }
 }"""
@@ -145,17 +150,24 @@ query($owner: String!, $name: String!, $uid: ID!, $cursor: String) {
 
 
 def loc_stats(uid):
-    """Total lines added / deleted across all of the user's own commits."""
+    """Lines added / deleted across the user's own commits, with junk filtered out."""
     repos, cursor = [], None
     while True:
         d = gql(REPOS_Q, {"login": USER, "cursor": cursor})["user"]["repositories"]
-        repos += [(n["owner"]["login"], n["name"]) for n in d["nodes"]]
+        for n in d["nodes"]:
+            if LOC_SKIP_FORKS and n["isFork"]:
+                continue
+            if n["name"] in LOC_EXCLUDE_REPOS:
+                continue
+            repos.append((n["owner"]["login"], n["name"]))
         if not d["pageInfo"]["hasNextPage"]:
             break
         cursor = d["pageInfo"]["endCursor"]
 
     adds = dels = 0
+    breakdown = []
     for owner, name in repos:
+        ra = rd = skipped = 0
         cursor = None
         while True:
             r = gql(HISTORY_Q, {"owner": owner, "name": name, "uid": uid, "cursor": cursor})
@@ -164,11 +176,23 @@ def loc_stats(uid):
                 break
             h = ref["target"]["history"]
             for n in h["nodes"]:
-                adds += n["additions"]
-                dels += n["deletions"]
+                if n["additions"] + n["deletions"] > LOC_MAX_COMMIT_LINES:
+                    skipped += 1
+                    continue
+                ra += n["additions"]
+                rd += n["deletions"]
             if not h["pageInfo"]["hasNextPage"]:
                 break
             cursor = h["pageInfo"]["endCursor"]
+        adds += ra
+        dels += rd
+        breakdown.append((ra + rd, f"{owner}/{name}", ra, rd, skipped))
+
+    # Shows in the Actions log: find the repo that is inflating your total
+    print("Lines of code per repo (largest first):")
+    for _, full, ra, rd, sk in sorted(breakdown, reverse=True):
+        note = f"   [skipped {sk} huge commits]" if sk else ""
+        print(f"  {full}: +{ra:,} / -{rd:,}{note}")
     return adds, dels
 
 
@@ -288,7 +312,8 @@ def render(art, info, theme):
     art = [""] * max(0, (len(info) - len(art)) // 2) + list(art)
     rows = list(zip_longest(art, info, fillvalue=None))
     info_x = PAD_X + (art_w + GAP) * CHAR_W
-    width = int(info_x + W * CHAR_W + PAD_X)
+    info_cols = max([W] + [_len(l) for l in info])
+    width = int(info_x + info_cols * CHAR_W + PAD_X)
     height = len(rows) * LINE_H + 2 * PAD_Y - 6
 
     out = [
