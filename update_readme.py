@@ -26,7 +26,7 @@ TOKEN = os.environ.get("STATS_TOKEN") or os.environ.get("GITHUB_TOKEN", "")
 # ---- SVG look ----
 FONT_SIZE = 14
 LINE_H = 20
-CHAR_W = 8.6            # slightly wider than real glyphs so text never clips
+CHAR_W = 8.45           # ~real glyph width; textLength in render() locks spacing to this
 PAD_X, PAD_Y = 28, 26
 FONT = "'SFMono-Regular','Consolas','Liberation Mono','Menlo','DejaVu Sans Mono',monospace"
 
@@ -244,7 +244,8 @@ def row(label, value):
 
 
 def head(title):
-    return [(f"- {title} " + "-" * max(W - len(title) - 3, 3), "fg")]
+    # the "rule" segment is drawn as a real continuous line in render()
+    return [(f"- {title} ", "fg"), ("-" * max(W - len(title) - 3, 3), "rule")]
 
 
 def pair(l1, v1, l2, v2, wr=24):
@@ -326,12 +327,30 @@ def render(art, info, theme):
     for i, (a, segs) in enumerate(rows):
         y = PAD_Y + i * LINE_H + FONT_SIZE
         if a and a.strip():
-            out.append(f'<text x="{PAD_X}" y="{y}" fill="{c["fg"]}">{nb(a)}</text>')
-        if segs:
-            parts = "".join(
-                f'<tspan fill="{c[role]}">{nb(text)}</tspan>' for text, role in segs
+            out.append(
+                f'<text x="{PAD_X}" y="{y}" fill="{c["fg"]}" '
+                f'textLength="{len(a) * CHAR_W:.1f}" lengthAdjust="spacing">{nb(a)}</text>'
             )
-            out.append(f'<text x="{info_x:.1f}" y="{y}">{parts}</text>')
+        if segs:
+            parts, rules, col = [], [], 0
+            for text, role in segs:
+                if role == "rule":
+                    x1 = info_x + col * CHAR_W + 1
+                    x2 = info_x + (col + len(text)) * CHAR_W - 1
+                    ly = y - 4.5
+                    rules.append(
+                        f'<line x1="{x1:.1f}" y1="{ly:.1f}" x2="{x2:.1f}" y2="{ly:.1f}" '
+                        f'stroke="{c["fg"]}" stroke-width="1.3" stroke-linecap="round"/>'
+                    )
+                    parts.append(f'<tspan>{nb(text)}</tspan>')  # invisible spacer
+                else:
+                    parts.append(f'<tspan fill="{c[role]}">{nb(text)}</tspan>')
+                col += len(text)
+            out.extend(rules)
+            out.append(
+                f'<text x="{info_x:.1f}" y="{y}" textLength="{col * CHAR_W:.1f}" '
+                f'lengthAdjust="spacing">{"".join(parts)}</text>'
+            )
     out += ["</g>", "</svg>"]
     return "\n".join(out)
 
