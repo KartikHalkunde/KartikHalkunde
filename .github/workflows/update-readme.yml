@@ -24,6 +24,7 @@ jobs:
       - run: python update_readme.py
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          STATS_TOKEN: ${{ secrets.STATS_TOKEN }}   # optional, see notes
       - name: Commit changes
         run: |
           git config user.name "github-actions[bot]"
