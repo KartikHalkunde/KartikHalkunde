@@ -12,7 +12,7 @@ from zoneinfo import ZoneInfo
 
 USER = "KartikHalkunde"
 DOB = date(2005, 9, 26)
-W = 62      # width (in characters) of the info column
+W = 60      # width (in characters) of the info column
 GAP = 3     # spaces between ASCII art and info column
 
 # ---- SVG look ----
