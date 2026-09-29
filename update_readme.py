@@ -2,8 +2,10 @@
 
 Output: assets/fastfetch-dark.svg and assets/fastfetch-light.svg
 Optional: put your own ASCII art in a file called ascii.txt next to this script.
+Optional: set a STATS_TOKEN secret (classic PAT: repo + read:user) to include
+private repos in the stats. Without it, only public data is counted.
 """
-import os, json, urllib.request
+import os, json, time, urllib.request
 from datetime import date, datetime, timedelta
 from itertools import zip_longest
 from pathlib import Path
@@ -12,8 +14,9 @@ from zoneinfo import ZoneInfo
 
 USER = "KartikHalkunde"
 DOB = date(2005, 9, 26)
-W = 60      # width (in characters) of the info column
+W = 64      # width (in characters) of the info column
 GAP = 3     # spaces between ASCII art and info column
+TOKEN = os.environ.get("STATS_TOKEN") or os.environ.get("GITHUB_TOKEN", "")
 
 # ---- SVG look ----
 FONT_SIZE = 14
@@ -23,10 +26,10 @@ PAD_X, PAD_Y = 28, 26
 FONT = "'SFMono-Regular','Consolas','Liberation Mono','Menlo','DejaVu Sans Mono',monospace"
 
 THEMES = {
-    "dark": dict(bg="#161b22", border="#30363d", fg="#c9d1d9",
-                 muted="#6e7681", label="#ffa657", value="#79c0ff"),
-    "light": dict(bg="#f6f8fa", border="#d0d7de", fg="#24292f",
-                  muted="#8c959f", label="#bc4c00", value="#0550ae"),
+    "dark": dict(bg="#161b22", border="#30363d", fg="#c9d1d9", muted="#6e7681",
+                 label="#ffa657", value="#79c0ff", add="#3fb950", dele="#f85149"),
+    "light": dict(bg="#f6f8fa", border="#d0d7de", fg="#24292f", muted="#8c959f",
+                  label="#bc4c00", value="#0550ae", add="#1a7f37", dele="#cf222e"),
 }
 
 DEFAULT_ART = [
@@ -71,20 +74,111 @@ def uptime(today):
     return f"{y} years, {m} months, {d} days"
 
 
+# ---------------- GitHub API ----------------
 def api(path):
     req = urllib.request.Request(
         f"https://api.github.com{path}",
-        headers={
-            "Accept": "application/vnd.github+json",
-            "Authorization": f"Bearer {os.environ.get('GITHUB_TOKEN', '')}",
-        },
+        headers={"Accept": "application/vnd.github+json",
+                 "Authorization": f"Bearer {TOKEN}"},
     )
     with urllib.request.urlopen(req) as r:
         return json.load(r)
 
 
+def gql(query, variables=None, retries=3):
+    body = json.dumps({"query": query, "variables": variables or {}}).encode()
+    last = None
+    for attempt in range(retries):
+        try:
+            req = urllib.request.Request(
+                "https://api.github.com/graphql", data=body,
+                headers={"Authorization": f"Bearer {TOKEN}",
+                         "Content-Type": "application/json"},
+            )
+            with urllib.request.urlopen(req) as r:
+                data = json.load(r)
+            if "errors" in data:
+                raise RuntimeError(data["errors"])
+            return data["data"]
+        except Exception as e:  # retry on flaky 502s / timeouts
+            last = e
+            time.sleep(2 * (attempt + 1))
+    raise last
+
+
+USER_Q = """
+query($login: String!) {
+  user(login: $login) {
+    id
+    followers { totalCount }
+    repositories(ownerAffiliations: [OWNER]) { totalCount }
+    repositoriesContributedTo(contributionTypes: [COMMIT, PULL_REQUEST, ISSUE, REPOSITORY]) { totalCount }
+  }
+}"""
+
+REPOS_Q = """
+query($login: String!, $cursor: String) {
+  user(login: $login) {
+    repositories(first: 100, after: $cursor,
+                 ownerAffiliations: [OWNER, COLLABORATOR, ORGANIZATION_MEMBER]) {
+      pageInfo { hasNextPage endCursor }
+      nodes { name owner { login } }
+    }
+  }
+}"""
+
+HISTORY_Q = """
+query($owner: String!, $name: String!, $uid: ID!, $cursor: String) {
+  repository(owner: $owner, name: $name) {
+    defaultBranchRef {
+      target {
+        ... on Commit {
+          history(first: 100, after: $cursor, author: {id: $uid}) {
+            pageInfo { hasNextPage endCursor }
+            nodes { additions deletions }
+          }
+        }
+      }
+    }
+  }
+}"""
+
+
+def loc_stats(uid):
+    """Total lines added / deleted across all of the user's own commits."""
+    repos, cursor = [], None
+    while True:
+        d = gql(REPOS_Q, {"login": USER, "cursor": cursor})["user"]["repositories"]
+        repos += [(n["owner"]["login"], n["name"]) for n in d["nodes"]]
+        if not d["pageInfo"]["hasNextPage"]:
+            break
+        cursor = d["pageInfo"]["endCursor"]
+
+    adds = dels = 0
+    for owner, name in repos:
+        cursor = None
+        while True:
+            r = gql(HISTORY_Q, {"owner": owner, "name": name, "uid": uid, "cursor": cursor})
+            ref = r["repository"]["defaultBranchRef"]
+            if not ref:  # empty repo
+                break
+            h = ref["target"]["history"]
+            for n in h["nodes"]:
+                adds += n["additions"]
+                dels += n["deletions"]
+            if not h["pageInfo"]["hasNextPage"]:
+                break
+            cursor = h["pageInfo"]["endCursor"]
+    return adds, dels
+
+
 def stats():
+    s = {"repos": None, "stars": None, "followers": None, "commits": None,
+         "contributed": None, "loc": None}
+
     u = api(f"/users/{USER}")
+    s["repos"], s["followers"] = u["public_repos"], u["followers"]
+
     stars, page = 0, 1
     while True:
         repos = api(f"/users/{USER}/repos?per_page=100&page={page}")
@@ -92,38 +186,65 @@ def stats():
             break
         stars += sum(r["stargazers_count"] for r in repos)
         page += 1
-    commits = api(f"/search/commits?q=author:{USER}")["total_count"]
-    return u["public_repos"], stars, u["followers"], commits
+    s["stars"] = stars
+
+    s["commits"] = api(f"/search/commits?q=author:{USER}")["total_count"]
+
+    # GraphQL-based stats: never let a failure here break the whole card
+    try:
+        ud = gql(USER_Q, {"login": USER})["user"]
+        s["repos"] = ud["repositories"]["totalCount"]
+        s["followers"] = ud["followers"]["totalCount"]
+        s["contributed"] = ud["repositoriesContributedTo"]["totalCount"]
+        s["loc"] = loc_stats(ud["id"])
+    except Exception as e:
+        print(f"warning: GraphQL stats unavailable: {e}")
+    return s
 
 
-# ---- line builders: each returns a list of (text, color_role) segments ----
+# ---------------- line builders ----------------
+# Every line is a list of (text, color_role) segments.
+def _len(segs):
+    return sum(len(t) for t, _ in segs)
+
+
+def _v(value):
+    return [(value, "value")] if isinstance(value, str) else value
+
+
 def row(label, value):
-    dots = max(W - 5 - len(label) - len(value), 3)
+    v = _v(value)
+    dots = max(W - 5 - len(label) - _len(v), 3)
     return [(". ", "muted"), (label + ":", "label"),
-            (" " + "." * dots + " ", "muted"), (value, "value")]
+            (" " + "." * dots + " ", "muted")] + v
 
 
 def head(title):
     return [(f"- {title} " + "-" * max(W - len(title) - 3, 3), "fg")]
 
 
-def pair(l1, v1, l2, v2):
-    wl = (W - 3) // 2
-    wr = W - 3 - wl
-    d1 = max(wl - 5 - len(l1) - len(v1), 3)
-    d2 = max(wr - 3 - len(l2) - len(v2), 3)
-    return [(". ", "muted"), (l1 + ":", "label"), (" " + "." * d1 + " ", "muted"),
-            (v1, "value"), (" | ", "muted"),
-            (l2 + ":", "label"), (" " + "." * d2 + " ", "muted"), (v2, "value")]
+def pair(l1, v1, l2, v2, wr=24):
+    v1, v2 = _v(v1), _v(v2)
+    wl = W - 3 - wr
+    d1 = max(wl - 5 - len(l1) - _len(v1), 3)
+    d2 = max(wr - 3 - len(l2) - _len(v2), 3)
+    return ([(". ", "muted"), (l1 + ":", "label"), (" " + "." * d1 + " ", "muted")] + v1
+            + [(" | ", "muted"), (l2 + ":", "label"), (" " + "." * d2 + " ", "muted")] + v2)
 
 
 def build_info():
-    repos, stars, followers, commits = stats()
-    return [
+    s = stats()
+
+    repos_val = [(str(s["repos"]), "value")]
+    if s["contributed"] is not None:
+        repos_val += [(" ", "muted"), ("{Contributed:", "label"),
+                      (" ", "muted"), (f"{s['contributed']}" + "}", "value")]
+
+    lines = [
         head(f"{USER}@github"),
         row("OS", "Windows 11, Fedora Linux"),
         row("Uptime", uptime(today_ist())),
-        row("Host", "Student @ Vidyavardhini College Of Engineering"), 
+        row("Host", "Student @ Vidyavardhini College Of Engineering"),
         row("IDE", "VSCode, IntelliJ"),
         [(".", "muted")],
         row("Languages.Programming", "Java, Python, JS, C"),
@@ -140,11 +261,21 @@ def build_info():
         row("LeetCode", "u/KartikHalkunde"),
         [],
         head("GitHub Stats"),
-        pair("Repos", str(repos), "Stars", str(stars)),
-        pair("Commits", f"{commits:,}", "Followers", str(followers)),
+        pair("Repos", repos_val, "Stars", str(s["stars"])),
+        pair("Commits", f"{s['commits']:,}", "Followers", str(s["followers"])),
     ]
 
+    if s["loc"] is not None:
+        adds, dels = s["loc"]
+        lines.append(row("Lines of Code on GitHub", [
+            (f"{adds - dels:,}", "value"), (" ( ", "muted"),
+            (f"{adds:,}++", "add"), (", ", "muted"),
+            (f"{dels:,}--", "dele"), (" )", "muted"),
+        ]))
+    return lines
 
+
+# ---------------- SVG rendering ----------------
 def nb(text):
     """Escape for XML and use non-breaking spaces so alignment survives every renderer."""
     return escape(text).replace(" ", "\u00a0")
