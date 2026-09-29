@@ -123,7 +123,7 @@ def build_info():
         head(f"{USER}@github"),
         row("OS", "Windows 11, Fedora Linux"),
         row("Uptime", uptime(today_ist())),
-        row("Host", "Your Company"),  # TODO: change to your college/company
+        row("Host", "Student @ Vidyavardhini College Of Enggineering"), 
         row("IDE", "VSCode, IntelliJ"),
         [(".", "muted")],
         row("Languages.Programming", "Java, Python, JS, C"),
