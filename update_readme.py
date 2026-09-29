@@ -80,7 +80,7 @@ def build():
         "",
         head("Contact"),
         row("Email.Personal", "kartikhalkunde26@gmail.com"),
-        row("Email.Work", "kartikhalkunde@proton.me),
+        row("Email.Work", "kartikhalkunde@proton.me"),
         row("LinkedIn", "https://www.linkedin.com/in/kartikhalkunde/"),
         row("LeetCode", "https://leetcode.com/u/KartikHalkunde/"),
         "",
