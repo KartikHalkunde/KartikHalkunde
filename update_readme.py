@@ -2,7 +2,7 @@ import os, json, urllib.request
 from datetime import date, timedelta
 from itertools import zip_longest
 
-USER = "Mubashshir-Dev"
+USER = "KartikHalkunde"
 DOB = date(2005, 9, 26)
 W = 52  # width of the info column
 
@@ -66,7 +66,7 @@ def build():
     repos, stars, followers, commits = stats()
     info = [
         head(f"{USER}@github")[: W],
-        row("OS", "Windows, Android, Linux"),
+        row("OS", "Windows 11, Fedora Linux"),
         row("Uptime", uptime(date.today())),
         row("Host", "Your Company"),
         row("IDE", "VSCode, IntelliJ"),
@@ -79,10 +79,10 @@ def build():
         row("Hobbies.Hardware", "Painting, Music"),
         "",
         head("Contact"),
-        row("Email.Personal", "you@example.com"),
-        row("Email.Work", "work@example.com"),
-        row("LinkedIn", "your-linkedin-handle"),
-        row("LeetCode", "your-leetcode-handle"),
+        row("Email.Personal", "kartikhalkunde26@gmail.com"),
+        row("Email.Work", "kartikhalkunde@proton.me),
+        row("LinkedIn", "https://www.linkedin.com/in/kartikhalkunde/"),
+        row("LeetCode", "https://leetcode.com/u/KartikHalkunde/"),
         "",
         head("GitHub Stats"),
         row("Repos", str(repos)),
