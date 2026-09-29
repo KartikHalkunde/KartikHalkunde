@@ -153,6 +153,8 @@ def nb(text):
 def render(art, info, theme):
     c = THEMES[theme]
     art_w = max(len(a) for a in art)
+    # center short art vertically next to the info column
+    art = [""] * max(0, (len(info) - len(art)) // 2) + list(art)
     rows = list(zip_longest(art, info, fillvalue=None))
     info_x = PAD_X + (art_w + GAP) * CHAR_W
     width = int(info_x + W * CHAR_W + PAD_X)
