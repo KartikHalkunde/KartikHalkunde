@@ -1,10 +1,12 @@
 import os, json, urllib.request
+from datetime import datetime
+from zoneinfo import ZoneInfo
 from datetime import date, timedelta
 from itertools import zip_longest
 
 USER = "KartikHalkunde"
 DOB = date(2005, 9, 26)
-W = 52  # width of the info column
+W = 60  # width of the info column
 
 ART = [
     r"     .--.     ",
@@ -14,7 +16,12 @@ ART = [
     r"  (|     | )  ",
     r" /'\_   _/`\  ",
     r" \___)=(___/  ",
-]  # replace with your own ASCII art
+]  # replace with your own ASCII art (keep every line the same width)
+
+
+def today_ist():
+    # GitHub runners use UTC; use IST so the uptime rolls over at local midnight
+    return datetime.now(ZoneInfo("Asia/Kolkata")).date()
 
 
 def uptime(today):
@@ -33,8 +40,10 @@ def uptime(today):
 def api(path):
     req = urllib.request.Request(
         f"https://api.github.com{path}",
-        headers={"Accept": "application/vnd.github+json",
-                 "Authorization": f"Bearer {os.environ.get('GITHUB_TOKEN', '')}"},
+        headers={
+            "Accept": "application/vnd.github+json",
+            "Authorization": f"Bearer {os.environ.get('GITHUB_TOKEN', '')}",
+        },
     )
     with urllib.request.urlopen(req) as r:
         return json.load(r)
@@ -65,9 +74,9 @@ def head(title):
 def build():
     repos, stars, followers, commits = stats()
     info = [
-        head(f"{USER}@github")[: W],
+        head(f"{USER}@github")[:W],
         row("OS", "Windows 11, Fedora Linux"),
-        row("Uptime", uptime(date.today())),
+        row("Uptime", uptime(today_ist())),
         row("Host", "Your Company"),
         row("IDE", "VSCode, IntelliJ"),
         ".",
@@ -102,6 +111,7 @@ if __name__ == "__main__":
         text = f.read()
     start, end = "<!--FETCH_START-->", "<!--FETCH_END-->"
     a, b = text.index(start) + len(start), text.index(end)
-    new = text[:a] + "\n" + build() + "\n" + text[b:]
+    # The code fence is added here, so the markers stay outside it and remain hidden
+    new = text[:a] + "\n```text\n" + build() + "\n```\n" + text[b:]
     with open("README.md", "w", encoding="utf-8") as f:
         f.write(new)
