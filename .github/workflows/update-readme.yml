@@ -6,7 +6,9 @@ on:
   workflow_dispatch:
   push:
     branches: [main]
-    paths: [update_readme.py]
+    paths:
+      - update_readme.py
+      - ascii.txt
 
 permissions:
   contents: write
@@ -26,6 +28,6 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add README.md
-          git diff --cached --quiet || git commit -m "chore: update fastfetch block"
+          git add assets
+          git diff --cached --quiet || git commit -m "chore: update fastfetch card"
           git push
