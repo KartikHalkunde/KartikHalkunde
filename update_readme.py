@@ -77,7 +77,7 @@ def build():
         head(f"{USER}@github")[:W],
         row("OS", "Windows 11, Fedora Linux"),
         row("Uptime", uptime(today_ist())),
-        row("Host", "Your Company"),
+        row("Host", "Your Company"),  # TODO: change to your college/company
         row("IDE", "VSCode, IntelliJ"),
         ".",
         row("Languages.Programming", "Java, Python, JS, C"),
