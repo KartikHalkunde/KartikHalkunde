@@ -8,7 +8,7 @@
   <img alt="fastfetch" src="assets/fastfetch-dark.svg">
 </picture>
 
-<p align="left">
+<p align="center">
   <a href="mailto:kartikhalkunde@proton.me"><img src="assets/badge-mail.svg" alt="Mail"></a>
   <a href="https://kartikhalkunde.github.io"><img src="assets/badge-resume.svg" alt="Resume"></a>
   <a href="https://www.linkedin.com/in/kartikhalkunde/"><img src="assets/badge-linkedin.svg" alt="LinkedIn"></a>
