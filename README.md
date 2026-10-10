@@ -11,8 +11,8 @@
 <p align="center">
   <a href="mailto:kartikhalkunde@proton.me"><img src="assets/badge-mail.svg" alt="Mail"></a>
   <a href="https://kartikhalkunde.github.io"><img src="assets/badge-resume.svg" alt="Resume"></a>
-  <a href="https://www.linkedin.com/in/kartikhalkunde/"><img src="assets/badge-linkedin.svg" alt="LinkedIn"></a>
-  <a href="https://leetcode.com/u/KartikHalkunde/"><img src="assets/badge-leetcode.svg" alt="LeetCode"></a>
+  <a href="https://www.linkedin.com/in/kartikrashmin/"><img src="assets/badge-linkedin.svg" alt="LinkedIn"></a>
+  <a href="https://leetcode.com/u/KartikRashmin/"><img src="assets/badge-leetcode.svg" alt="LeetCode"></a>
 </p>
 
 <picture>
